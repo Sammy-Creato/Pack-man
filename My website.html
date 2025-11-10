@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Two Player Pac-Man Big Assets</title>
+<style>
+    body {
+        background-color: black;
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        font-family: Arial, sans-serif;
+        color: white;
+        flex-direction: column;
+    }
+    canvas {
+        background-color: #111;
+        display: block;
+        border: 3px solid #333;
+    }
+    h1 {
+        margin-bottom: 10px;
+    }
+    .instructions {
+        font-size: 14px;
+        margin-bottom: 10px;
+        text-align: center;
+    }
+</style>
+</head>
+<body>
+<h1>Two Player Pac-Man</h1>
+<div class="instructions">
+    Player 1: W/A/S/D | Player 2: Arrow Keys
+</div>
+<canvas id="gameCanvas" width="960" height="720"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// BIGGER ASSETS
+const gridSize = 30; 
+const rows = canvas.height / gridSize; 
+const cols = canvas.width / gridSize;  
+
+// Sounds (quieter)
+const pelletSound = new Audio('https://freesound.org/data/previews/66/66717_931655-lq.mp3');
+pelletSound.volume = 0.2;
+const deathSound = new Audio('https://freesound.org/data/previews/331/331912_3248244-lq.mp3');
+deathSound.volume = 0.3;
+
+// Players
+const player1 = { x: 1, y: 1, color: 'yellow', score: 0, lives: 3, alive: true, spawn: {x:1, y:1} };
+const player2 = { x: cols - 2, y: rows - 2, color: 'pink', score: 0, lives: 3, alive: true, spawn: {x:cols-2, y:rows-2} };
+
+// Ghosts
+const ghosts = [
+    { x: Math.floor(cols/2), y: 1, color: 'red', lastDir: {dx:0, dy:1} },
+    { x: Math.floor(cols/2), y: rows - 2, color: 'cyan', lastDir: {dx:0, dy:-1} }
+];
+
+// Maze layout
+const maze = [];
+for (let r = 0; r < rows; r++) {
+    maze[r] = [];
+    for (let c = 0; c < cols; c++) {
+        if (r === 0 || r === rows - 1 || c === 0 || c === cols - 1 || (r % 4 === 0 && c % 4 === 0)) {
+            maze[r][c] = 1; // wall
+        } else {
+            maze[r][c] = 2; // pellet
+        }
+    }
+}
+
+// Controls
+const keys = {};
+document.addEventListener('keydown', e => keys[e.key] = true);
+document.addEventListener('keyup', e => keys[e.key] = false);
+
+// Draw functions
+function drawMaze() {
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (maze[r][c] === 1) {
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(c * gridSize, r * gridSize, gridSize, gridSize);
+            } else if (maze[r][c] === 2) {
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(c * gridSize + gridSize/2, r * gridSize + gridSize/2, 5, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+    }
+}
+
+function drawPlayer(player) {
+    if (!player.alive) return;
+    ctx.fillStyle = player.color;
+    ctx.beginPath();
+    ctx.arc(player.x * gridSize + gridSize/2, player.y * gridSize + gridSize/2, gridSize/2 - 2, 0, Math.PI*2);
+    ctx.fill();
+}
+
+// Ghost drawing
+function drawGhost(ghost) {
+    const x = ghost.x * gridSize + gridSize/2;
+    const y = ghost.y * gridSize + gridSize/2;
+    const radius = gridSize/2 - 2;
+
+    ctx.fillStyle = ghost.color;
+    ctx.beginPath();
+    ctx.arc(x, y - 2, radius, Math.PI, 0, false);
+    ctx.lineTo(x + radius, y + radius);
+    const waveCount = 4;
+    const waveWidth = (radius*2)/waveCount;
+    for (let i=0; i<waveCount; i++) {
+        const cx = x - radius + i*waveWidth + waveWidth/2;
+        const cy = y + radius + ((i%2===0)? -6:6);
+        ctx.quadraticCurveTo(cx, cy, x - radius + (i+1)*waveWidth, y + radius);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = 'white';
+    ctx.beginPath();
+    ctx.arc(x - radius/2.5, y - 2, radius/4, 0, Math.PI*2);
+    ctx.arc(x + radius/2.5, y - 2, radius/4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = 'black';
+    ctx.beginPath();
+    ctx.arc(x - radius/2.5, y - 2, radius/8, 0, Math.PI*2);
+    ctx.arc(x + radius/2.5, y - 2, radius/8, 0, Math.PI*2);
+    ctx.fill();
+}
+
+function drawScores() {
+    ctx.fillStyle = 'white';
+    ctx.font = '18px Arial';
+    ctx.fillText(`P1 Score: ${player1.score} Lives: ${player1.lives}`, 10, 25);
+    ctx.fillText(`P2 Score: ${player2.score} Lives: ${player2.lives}`, 700, 25);
+}
+
+// Player movement
+function movePlayer(player, controls) {
+    if (!player.alive) return;
+    if (keys[controls.up] && maze[player.y-1][player.x] !== 1) player.y--;
+    if (keys[controls.down] && maze[player.y+1][player.x] !== 1) player.y++;
+    if (keys[controls.left] && maze[player.y][player.x-1] !== 1) player.x--;
+    if (keys[controls.right] && maze[player.y][player.x+1] !== 1) player.x++;
+
+    if (maze[player.y][player.x] === 2) {
+        maze[player.y][player.x] = 0;
+        player.score++;
+        pelletSound.currentTime = 0;
+        pelletSound.play();
+    }
+}
+
+// Ghost movement
+function moveGhost(ghost) {
+    const directions = [{dx:0,dy:-1},{dx:0,dy:1},{dx:-1,dy:0},{dx:1,dy:0}];
+    let valid = directions.filter(d => maze[ghost.y + d.dy][ghost.x + d.dx] !== 1);
+    valid = valid.filter(d => !(d.dx === -ghost.lastDir.dx && d.dy === -ghost.lastDir.dy));
+    if (valid.length === 0) valid = directions.filter(d => maze[ghost.y + d.dy][ghost.x + d.dx] !== 1);
+    const choice = valid[Math.floor(Math.random() * valid.length)];
+    ghost.x += choice.dx;
+    ghost.y += choice.dy;
+    ghost.lastDir = choice;
+}
+
+// Collision detection
+function checkCollisions() {
+    ghosts.forEach(ghost => {
+        [player1, player2].forEach(player => {
+            if (player.alive && ghost.x === player.x && ghost.y === player.y) {
+                deathSound.currentTime = 0;
+                deathSound.play();
+                player.lives--;
+                if (player.lives <= 0) {
+                    player.alive = false;
+                } else {
+                    player.x = player.spawn.x;
+                    player.y = player.spawn.y;
+                }
+            }
+        });
+    });
+}
+
+// Game loop
+let frameCount = 0;
+const moveDelay = 10;
+
+function gameLoop() {
+    frameCount++;
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    drawMaze();
+
+    if (frameCount % moveDelay === 0) {
+        movePlayer(player1, {up:'w', down:'s', left:'a', right:'d'});
+        movePlayer(player2, {up:'ArrowUp', down:'ArrowDown', left:'ArrowLeft', right:'ArrowRight'});
+        ghosts.forEach(moveGhost);
+        checkCollisions();
+    }
+
+    drawPlayer(player1);
+    drawPlayer(player2);
+    ghosts.forEach(drawGhost);
+    drawScores();
+
+    if ((player1.lives <= 0 && !player1.alive) && (player2.lives <= 0 && !player2.alive)) {
+        ctx.fillStyle = 'white';
+        ctx.font = '30px Arial';
+        ctx.fillText('Game Over!', canvas.width/2 - 80, canvas.height/2);
+    } else {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+gameLoop();
+</script>
+</body>
+</html>
